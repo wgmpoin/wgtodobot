@@ -1,30 +1,39 @@
 import os
 import asyncio
 import logging
-from flask import Flask, request, jsonify
-from telegram import Update
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler, filters,
-    ConversationHandler, ContextTypes
-)
-from supabase import create_client
 from datetime import datetime
+from flask import Flask, request, jsonify
+from telegram import Update, Bot
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    ConversationHandler
+)
+from supabase import create_client, Client
 
-# Konfigurasi logging
+# =============================================
+# KONFIGURASI AWAL
+# =============================================
+
+# Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Inisialisasi environment variables
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-PORT = int(os.getenv("PORT", "10000"))  # Sesuai port Render
+# Load environment variables
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+WEBHOOK_URL = "https://wgtodobot.onrender.com/webhook"  # Ganti dengan URL Anda
+PORT = int(os.getenv('PORT', 10000))
 
 # Inisialisasi Supabase
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Inisialisasi Flask
 app = Flask(__name__)
@@ -41,176 +50,233 @@ ASK_DESC, ASK_DEADLINE, ASK_RECEIVER = range(3)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler untuk command /start"""
-    telegram_id = update.effective_user.id
     try:
-        user = supabase.table("users").select("*").eq("id", telegram_id).execute().data
+        user_id = update.effective_user.id
+        user = supabase.table('users').select('*').eq('id', user_id).execute().data
         
         if user:
             await update.message.reply_text(
-                f"Halo {user[0]['alias']}! Kamu sudah terdaftar.\n"
+                f"Halo {user[0]['alias']}! 🎉\n"
+                "Anda sudah terdaftar.\n"
                 "Gunakan /add untuk menambah tugas."
             )
         else:
             await update.message.reply_text(
-                "⚠️ Kamu belum terdaftar. Hubungi admin untuk didaftarkan."
+                "⚠️ Anda belum terdaftar.\n"
+                "Hubungi admin untuk didaftarkan."
             )
     except Exception as e:
         logger.error(f"Error di /start: {e}")
-        await update.message.reply_text("❌ Terjadi error. Coba lagi nanti.")
+        await update.message.reply_text("❌ Terjadi kesalahan. Silakan coba lagi.")
 
-async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler untuk memulai proses penambahan tugas"""
-    telegram_id = update.effective_user.id
+async def add_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mulai proses penambahan tugas"""
     try:
-        user = supabase.table("users").select("*").eq("id", telegram_id).execute().data
+        user_id = update.effective_user.id
+        user = supabase.table('users').select('*').eq('id', user_id).execute().data
         
-        if not user or not user[0].get("can_add_task", False):
-            await update.message.reply_text("❌ Kamu tidak punya izin menambah tugas.")
+        if not user or not user[0].get('can_add_task', False):
+            await update.message.reply_text("❌ Anda tidak memiliki izin untuk menambah tugas.")
             return ConversationHandler.END
-        
-        await update.message.reply_text("✏️ Masukkan deskripsi tugas:")
+            
+        await update.message.reply_text(
+            "📝 Masukkan deskripsi tugas:\n"
+            "(Contoh: Buat laporan penjualan bulanan)"
+        )
         return ASK_DESC
     except Exception as e:
         logger.error(f"Error di /add: {e}")
-        await update.message.reply_text("❌ Gagal memproses. Coba lagi.")
+        await update.message.reply_text("❌ Gagal memulai proses. Silakan coba lagi.")
         return ConversationHandler.END
 
-async def ask_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Step 1: Meminta deadline"""
-    context.user_data["description"] = update.message.text.strip()
-    await update.message.reply_text("📅 Masukkan deadline (format YYYY-MM-DD):")
+async def ask_task_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Meminta deadline tugas"""
+    context.user_data['description'] = update.message.text.strip()
+    await update.message.reply_text(
+        "📅 Masukkan deadline tugas (YYYY-MM-DD):\n"
+        "(Contoh: 2025-07-15)"
+    )
     return ASK_DEADLINE
 
-async def ask_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Step 2: Meminta penerima tugas"""
-    deadline_str = update.message.text.strip()
+async def ask_task_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Meminta penerima tugas"""
+    deadline = update.message.text.strip()
     try:
-        datetime.strptime(deadline_str, "%Y-%m-%d")
-        context.user_data["deadline"] = deadline_str
-        await update.message.reply_text("👤 Masukkan alias penerima tugas:")
+        datetime.strptime(deadline, '%Y-%m-%d')
+        context.user_data['deadline'] = deadline
+        await update.message.reply_text(
+            "👤 Masukkan alias penerima tugas:\n"
+            "(Contoh: budi)"
+        )
         return ASK_RECEIVER
     except ValueError:
-        await update.message.reply_text("❌ Format tanggal salah. Gunakan YYYY-MM-DD. Coba lagi:")
+        await update.message.reply_text(
+            "❌ Format tanggal salah!\n"
+            "Gunakan format YYYY-MM-DD.\n"
+            "Silakan coba lagi:"
+        )
         return ASK_DEADLINE
 
-async def save_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Step 3: Menyimpan tugas ke database"""
+async def save_new_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Menyimpan tugas baru ke database"""
     alias = update.message.text.strip()
     try:
-        receiver = supabase.table("users").select("*").eq("alias", alias).execute().data
+        # Cari user penerima
+        receiver = supabase.table('users').select('*').eq('alias', alias).execute().data
         
         if not receiver:
-            await update.message.reply_text("❌ Penerima tidak ditemukan. Proses dibatalkan.")
+            await update.message.reply_text(
+                "❌ Penerima tidak ditemukan!\n"
+                "Proses dibatalkan."
+            )
             return ConversationHandler.END
-
-        task = {
-            "giver_id": update.effective_user.id,
-            "receiver_id": receiver[0]["id"],
-            "description": context.user_data["description"],
-            "deadline": context.user_data["deadline"],
-            "created_at": datetime.utcnow().isoformat()
+        
+        # Simpan ke database
+        task_data = {
+            'giver_id': update.effective_user.id,
+            'receiver_id': receiver[0]['id'],
+            'description': context.user_data['description'],
+            'deadline': context.user_data['deadline'],
+            'created_at': datetime.utcnow().isoformat()
         }
         
-        supabase.table("tasks").insert(task).execute()
-        await update.message.reply_text("✅ Tugas berhasil ditambahkan!")
+        supabase.table('tasks').insert(task_data).execute()
         
+        await update.message.reply_text(
+            "✅ Tugas berhasil ditambahkan!\n"
+            f"Penerima: {alias}\n"
+            f"Deadline: {context.user_data['deadline']}"
+        )
+        
+        # Kirim notifikasi ke penerima
+        try:
+            bot = Bot(token=BOT_TOKEN)
+            await bot.send_message(
+                chat_id=receiver[0]['id'],
+                text=f"📌 Anda mendapat tugas baru!\n\n"
+                     f"Deskripsi: {context.user_data['description']}\n"
+                     f"Deadline: {context.user_data['deadline']}"
+            )
+        except Exception as e:
+            logger.error(f"Gagal mengirim notifikasi: {e}")
+            
     except Exception as e:
         logger.error(f"Error menyimpan tugas: {e}")
-        await update.message.reply_text("❌ Gagal menyimpan tugas. Coba lagi.")
+        await update.message.reply_text(
+            "❌ Gagal menyimpan tugas!\n"
+            "Silakan coba lagi nanti."
+        )
     
     return ConversationHandler.END
 
-async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler untuk command /list"""
-    telegram_id = update.effective_user.id
+async def list_user_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Menampilkan daftar tugas"""
     try:
-        tasks = supabase.table("tasks").select("*").or_(
-            f"giver_id.eq.{telegram_id},receiver_id.eq.{telegram_id}"
+        user_id = update.effective_user.id
+        tasks = supabase.table('tasks').select('*').or_(
+            f'giver_id.eq.{user_id},receiver_id.eq.{user_id}'
         ).execute().data
-
+        
         if not tasks:
-            await update.message.reply_text("📭 Tidak ada tugas untukmu saat ini.")
+            await update.message.reply_text("📭 Anda tidak memiliki tugas saat ini.")
             return
-
-        pesan = "📋 Daftar Tugas Anda:\n\n"
-        for t in tasks:
-            status = "⌛" if datetime.strptime(t['deadline'], "%Y-%m-%d") > datetime.utcnow() else "⏳"
-            pesan += f"{status} {t['description']}\n   📅 {t['deadline']}\n\n"
-
-        await update.message.reply_text(pesan)
+        
+        message = "📋 Daftar Tugas Anda:\n\n"
+        for task in tasks:
+            status = "✅" if datetime.strptime(task['deadline'], '%Y-%m-%d') > datetime.utcnow() else "⏳"
+            message += (
+                f"{status} {task['description']}\n"
+                f"   🗓 {task['deadline']}\n"
+                f"   👤 {'Anda memberi' if task['giver_id'] == user_id else 'Anda menerima'}\n\n"
+            )
+        
+        await update.message.reply_text(message)
     except Exception as e:
         logger.error(f"Error di /list: {e}")
         await update.message.reply_text("❌ Gagal mengambil daftar tugas.")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler untuk command /help"""
-    bantuan = (
-        "🤖 *Daftar Perintah* 🤖\n\n"
-        "/start - Memulai bot\n"
-        "/add - Tambah tugas baru\n"
-        "/list - Lihat tugas Anda\n"
-        "/help - Tampilkan pesan bantuan\n\n"
-        "Gunakan format YYYY-MM-DD untuk deadline."
-    )
-    await update.message.reply_text(bantuan)
+async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Membatalkan percakapan"""
+    await update.message.reply_text("❌ Proses dibatalkan.")
+    return ConversationHandler.END
 
 # =============================================
-# SETUP HANDLER DAN WEBHOOK
+# SETUP APPLICATION
 # =============================================
 
 def setup_handlers():
-    """Mengatur semua handler untuk Telegram bot"""
+    """Mengatur semua handler untuk bot"""
+    
     # Handler untuk percakapan tambah tugas
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("add", add_start)],
+        entry_points=[CommandHandler('add', add_task_start)],
         states={
-            ASK_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_deadline)],
-            ASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_receiver)],
-            ASK_RECEIVER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_task)],
+            ASK_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_task_deadline)],
+            ASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_task_receiver)],
+            ASK_RECEIVER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_new_task)],
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+        fallbacks=[CommandHandler('cancel', cancel_conversation)],
     )
-
+    
     # Tambahkan semua handler
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler('start', start))
     application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("list", list_tasks))
-    application.add_handler(CommandHandler("help", help_command))
-
+    application.add_handler(CommandHandler('list', list_user_tasks))
+    
     # Log semua handler yang terdaftar
     logger.info("Handler berhasil diatur")
 
+# =============================================
+# FLASK ROUTES
+# =============================================
+
 @app.route('/')
-def home():
+def health_check():
     """Endpoint untuk health check"""
-    return "🤖 Bot sedang berjalan dengan baik!", 200
+    return "🤖 Bot berjalan dengan baik!", 200
 
 @app.route('/webhook', methods=['POST'])
-def webhook():
+async def telegram_webhook():
     """Endpoint untuk menerima update dari Telegram"""
     if request.method == 'POST':
         try:
             # Parse update dari Telegram
             update = Update.de_json(request.get_json(), application.bot)
             
-            # Proses update secara asynchronous
-            asyncio.run(application.process_update(update))
+            # Proses update
+            await application.process_update(update)
             
-            return jsonify({"status": "success"}), 200
+            return jsonify({'status': 'success'}), 200
         except Exception as e:
             logger.error(f"Error memproses update: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
-    return jsonify({"status": "error", "message": "Method not allowed"}), 405
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'error', 'message': 'Method not allowed'}), 405
 
 # =============================================
 # FUNGSI UTAMA
 # =============================================
 
-def init_bot():
-    """Inisialisasi bot"""
-    setup_handlers()
-    logger.info("Bot berhasil diinisialisasi")
+async def set_telegram_webhook():
+    """Mengatur webhook untuk Telegram"""
+    try:
+        await application.bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True
+        )
+        logger.info(f"Webhook berhasil disetel ke: {WEBHOOK_URL}")
+    except Exception as e:
+        logger.error(f"Gagal menyetel webhook: {e}")
+
+def main():
+    """Fungsi utama untuk menjalankan bot"""
+    # Setup handlers
+    setup_handers()
+    
+    # Set webhook
+    asyncio.run(set_telegram_webhook())
+    
+    # Jalankan Flask
+    app.run(host='0.0.0.0', port=PORT)
 
 if __name__ == '__main__':
-    init_bot()
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    main()
