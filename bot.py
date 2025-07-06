@@ -17,10 +17,6 @@ from telegram.ext import (
 
 import sqlite3
 
-# === Load .env ===
-load_dotenv()
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
 # === Logging ===
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
