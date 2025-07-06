@@ -1,11 +1,5 @@
 import asyncio
 import os
-
-# Load .env hanya di lokal
-if os.getenv("FLY_APP_NAME") is None:
-    from dotenv import load_dotenv
-    load_dotenv()
-
 from supabase import create_client
 from telegram import Bot
 
