@@ -1,4 +1,11 @@
 app = "wgtodobot"
 
 [env]
-PORT = "8080"
+PORT = "10000"  # Match the port your app is actually using
+
+[http_service]
+  internal_port = 10000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
