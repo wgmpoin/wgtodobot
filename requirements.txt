@@ -6,4 +6,5 @@ postgrest==1.1.1
 realtime==2.5.3
 storage3==0.12.0
 python-dotenv==1.0.1
+flask
 
