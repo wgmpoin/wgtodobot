@@ -8,25 +8,27 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Handler command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎉 Bot berhasil terhubung!")
+    await update.message.reply_text("🔥 BOT PRODUKSI AKTIF!")
 
-# Setup bot
-def create_app():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    return app
+def setup_bot():
+    bot = Application.builder().token(BOT_TOKEN).build()
+    bot.add_handler(CommandHandler("start", start))
+    return bot
 
-# Webhook route
 @app.route('/webhook', methods=['POST'])
-async def handle_webhook():
-    bot = create_app()
+async def webhook():
+    bot = setup_bot()
     update = Update.de_json(request.get_json(), bot.bot)
     await bot.process_update(update)
     return '', 200
 
 @app.route('/')
 def home():
-    return "Bot aktif! Kirim /start di Telegram", 200
+    return "PRODUCTION READY", 200
+
+def run_production():
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=10000)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    run_production()
