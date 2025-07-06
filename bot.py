@@ -2,9 +2,9 @@
 # FINAL VERSION: Telegram To-Do List Bot (Private, Role-Based, Auto .env)
 
 import os
+TOKEN = os.environ["BOT_TOKEN"]
 import logging
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 from telegram import Update, ForceReply
 from telegram.ext import (
     Application,
