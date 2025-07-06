@@ -63,4 +63,58 @@ async def save_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "deadline": context.user_data["deadline"]
     }).execute()
 
-    await update.message.reply_text("✅ Tugas berhas_
+    await update.message.reply_text("✅ Tugas berhasil ditambahkan.")
+    return ConversationHandler.END
+
+# === List Task ===
+async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = update.effective_user.id
+    tasks = supabase.table("tasks").select("*").or_(
+        f"giver_id.eq.{telegram_id},receiver_id.eq.{telegram_id}"
+    ).execute().data
+
+    if not tasks:
+        await update.message.reply_text("📭 Tidak ada tugas.")
+        return
+
+    message = "📋 Daftar Tugas:\n\n"
+    for task in tasks:
+        message += (
+            f"📝 {task['description']}\n"
+            f"📅 {task['deadline']}\n\n"
+        )
+
+    await update.message.reply_text(message)
+
+# === Help ===
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "/start - Mulai bot\n"
+        "/add - Tambah tugas\n"
+        "/list - Lihat tugas\n"
+        "/help - Bantuan"
+    )
+
+# === Main ===
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("add", add)],
+        states={
+            ASK_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_deadline)],
+            ASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_receiver)],
+            ASK_RECEIVER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_task)],
+        },
+        fallbacks=[],
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("list", list_tasks))
+    app.add_handler(CommandHandler("help", help_command))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
