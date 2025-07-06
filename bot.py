@@ -114,7 +114,12 @@ def main():
     app.add_handler(CommandHandler("list", list_tasks))
     app.add_handler(CommandHandler("help", help_command))
 
-    app.run_polling()
+    app.run_webhook(
+    listen="0.0.0.0",
+    port=int(os.environ.get("PORT", 5000)),
+    webhook_url=os.environ["WEBHOOK_URL"],
+)
+
 
 if __name__ == "__main__":
     main()
