@@ -1,0 +1,4 @@
+app = "wgtodobot"
+
+[env]
+PORT = "8080"
