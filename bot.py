@@ -1,11 +1,11 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters,
+    Application, CommandHandler, MessageHandler, filters,
     ContextTypes, ConversationHandler
 )
 from supabase import create_client
-from datetime import date, timedelta
+from flask import Flask, request
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -14,8 +14,13 @@ OWNER_ID = int(os.getenv("OWNER_ID"))
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# === Start Command ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+ASK_DESCRIPTION, ASK_DEADLINE, ASK_RECEIVER = range(3)
+
+app = Application.builder().token(BOT_TOKEN).build()
+flask_app = Flask(__name__)
+
+# === Telegram Handlers ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     user = supabase.table("users").select("*").eq("id", telegram_id).execute().data
 
@@ -23,9 +28,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("✅ Kamu sudah terdaftar.\nGunakan /add untuk tambah tugas.")
     else:
         await update.message.reply_text("🔒 Kamu belum terdaftar di sistem. Hubungi admin.")
-
-# === Add Task ===
-ASK_DESCRIPTION, ASK_DEADLINE, ASK_RECEIVER = range(3)
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
@@ -66,7 +68,6 @@ async def save_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Tugas berhasil ditambahkan.")
     return ConversationHandler.END
 
-# === List Task ===
 async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     tasks = supabase.table("tasks").select("*").or_(
@@ -86,7 +87,6 @@ async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(message)
 
-# === Help ===
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "/start - Mulai bot\n"
@@ -95,9 +95,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - Bantuan"
     )
 
+# === Flask Webhook ===
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    app.process_update(update)
+    return "OK"
+
 # === Main ===
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+if __name__ == "__main__":
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("list", list_tasks))
+    app.add_handler(CommandHandler("help", help_command))
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("add", add)],
@@ -109,17 +118,6 @@ def main():
         fallbacks=[],
     )
 
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
-    app.add_handler(CommandHandler("list", list_tasks))
-    app.add_handler(CommandHandler("help", help_command))
 
-    app.run_webhook(
-    listen="0.0.0.0",
-    port=int(os.environ.get("PORT", 5000)),
-    webhook_url=os.environ["WEBHOOK_URL"],
-)
-
-
-if __name__ == "__main__":
-    main()
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
