@@ -1,7 +1,7 @@
 app = "wgtodobot"
 
 [env]
-PORT = "10000"  # Match the port your app is actually using
+PORT = "10000"  # Harus sama dengan di bot.py
 
 [http_service]
   internal_port = 10000
