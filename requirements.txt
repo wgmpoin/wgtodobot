@@ -1,4 +1,4 @@
-python-telegram-bot==22.2
+python-telegram-bot[webhooks]==22.2
 supabase==2.16.0
 httpx==0.28.1
 gotrue==2.12.3
@@ -6,3 +6,4 @@ postgrest==1.1.1
 realtime==2.5.3
 storage3==0.12.0
 python-dotenv==1.0.1
+
