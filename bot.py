@@ -2,17 +2,17 @@
 import os
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application,
     ApplicationBuilder,
+    Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ConversationHandler,
-    filters,
     ContextTypes,
+    filters,
 )
 import db
 
@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-APP_NAME = "wgtodobot"  # Ganti nama Fly.io kamu di sini
+APP_NAME = "wgtodobot"  # Ganti dengan nama Fly.io kamu
 WEBHOOK_URL = f"https://{APP_NAME}.fly.dev/webhook"
 PORT = int(os.getenv("PORT", "8080"))
 
@@ -39,9 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Permintaan kamu sedang menunggu persetujuan.")
         else:
             await db.register_pending_user(update.effective_user)
-            await update.message.reply_text(
-                "Permintaan kamu dikirim ke owner. Tunggu persetujuan."
-            )
+            await update.message.reply_text("Permintaan kamu dikirim ke owner. Tunggu persetujuan.")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -135,7 +133,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Dibatalkan.")
     return ConversationHandler.END
 
-
 # === MAIN FUNCTION ===
 async def main():
     application = ApplicationBuilder().token(TOKEN).build()
@@ -155,7 +152,6 @@ async def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(approve_conv)
-
 
     logger.info("Bot jalan di webhook mode.")
     await application.run_webhook(
