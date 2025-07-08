@@ -22,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 APP_NAME = "wgtodobot"  # Ganti nama Fly.io kamu di sini
 WEBHOOK_URL = f"https://{APP_NAME}.fly.dev/webhook"
 PORT = int(os.getenv("PORT", "8080"))
