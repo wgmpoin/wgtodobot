@@ -156,11 +156,6 @@ async def main():
     )
     application.add_handler(approve_conv)
 
-    # Set webhook otomatis
-    webhook_info = await application.bot.get_webhook_info()
-    if webhook_info.url != WEBHOOK_URL:
-        await application.bot.set_webhook(url=WEBHOOK_URL)
-        logger.info("Webhook berhasil disetel.")
 
     logger.info("Bot jalan di webhook mode.")
     await application.run_webhook(
