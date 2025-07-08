@@ -2,17 +2,17 @@
 import os
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
     Application,
+    ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ConversationHandler,
-    ContextTypes,
     filters,
+    ContextTypes,
 )
 import db
 
@@ -133,6 +133,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Dibatalkan.")
     return ConversationHandler.END
 
+
 # === MAIN FUNCTION ===
 async def main():
     application = ApplicationBuilder().token(TOKEN).build()
@@ -152,6 +153,12 @@ async def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(approve_conv)
+
+    # Set webhook otomatis
+    webhook_info = await application.bot.get_webhook_info()
+    if webhook_info.url != WEBHOOK_URL:
+        await application.bot.set_webhook(url=WEBHOOK_URL)
+        logger.info("Webhook berhasil disetel.")
 
     logger.info("Bot jalan di webhook mode.")
     await application.run_webhook(
