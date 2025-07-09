@@ -1,3 +1,6 @@
-# === FILE: requirements.txt ===
-python-telegram-bot==20.3
-httpx==0.24.1
+python-telegram-bot[webhooks]==20.3 # Versi yang kompatibel dengan httpx 0.24.x
+httpx==0.24.1 # Versi spesifik yang menyelesaikan konflik
+supabase==2.0.0
+python-telegram-bot[job-queue]==20.9
+apscheduler
+

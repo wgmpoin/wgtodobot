@@ -1,106 +1,77 @@
-# === FILE: db.py ===
 import os
-import httpx
+from supabase import create_client, Client
+from datetime import date
 import logging
-from datetime import datetime
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
+logger = logging.getLogger(__name__)
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-async def fetch_user(user_id):
-    url = f"{SUPABASE_URL}/rest/v1/users?select=*&id=eq.{user_id}"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, headers=HEADERS)
-        if r.status_code == 200 and r.json():
-            return r.json()[0]
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL atau SUPABASE_KEY belum diatur.")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def fetch_user(user_id):
+    response = supabase.from_("users").select("*").eq("id", user_id).execute()
+    return response.data[0] if response.data else None
+
+def fetch_user_by_alias(alias):
+    response = supabase.from_("users").select("*").eq("alias", alias).execute()
+    return response.data[0] if response.data else None
+
+def fetch_all_users():
+    response = supabase.from_("users").select("id, alias, division, role").order("alias").execute()
+    return response.data if response.data else []
+
+def add_pending_user(user):
+    exists = supabase.from_("pending_users").select("id").eq("id", user.id).execute()
+    if exists.data:
         return None
-
-
-async def fetch_user_by_alias(alias):
-    url = f"{SUPABASE_URL}/rest/v1/users?select=*&alias=eq.{alias}"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, headers=HEADERS)
-        if r.status_code == 200 and r.json():
-            return r.json()[0]
-        return None
-
-
-async def fetch_all_users():
-    url = f"{SUPABASE_URL}/rest/v1/users?select=id"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, headers=HEADERS)
-        if r.status_code == 200:
-            return r.json()
-        else:
-            logging.error(f"fetch_all_users error: {r.text}")
-            return []
-
-
-async def fetch_tasks(user_id):
-    url = f"{SUPABASE_URL}/rest/v1/tasks?select=*,giver:users(id,alias)&receiver:users(id,alias)&receiver_id=eq.{user_id}"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, headers=HEADERS)
-        if r.status_code == 200:
-            tasks = r.json()
-            # Gabungkan alias pemberi
-            for task in tasks:
-                task["giver_alias"] = task["giver"]["alias"]
-            return tasks
-        else:
-            logging.error(f"fetch_tasks error: {r.text}")
-            return []
-
-
-async def fetch_pending_users():
-    url = f"{SUPABASE_URL}/rest/v1/pending_users?select=*"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, headers=HEADERS)
-        if r.status_code == 200:
-            return r.json()
-        else:
-            logging.error(f"fetch_pending_users error: {r.text}")
-            return []
-
-
-async def register_pending_user(user):
-    url = f"{SUPABASE_URL}/rest/v1/pending_users"
-    payload = {
+    supabase.from_("pending_users").insert({
         "id": user.id,
         "first_name": user.first_name,
         "last_name": user.last_name,
-        "requested_by": user.id,
-        "requested_at": datetime.utcnow().isoformat()
-    }
-    async with httpx.AsyncClient() as client:
-        r = await client.post(url, json=payload, headers=HEADERS)
-        if r.status_code in (200, 201):
-            return True
-        else:
-            logging.error(f"register_pending_user error: {r.text}")
-            return False
+    }).execute()
+    return True
 
+def fetch_pending_users():
+    response = supabase.from_("pending_users").select("*").order("id").execute()
+    return response.data if response.data else []
 
-async def approve_user(user_id, alias, division, can_assign):
-    url = f"{SUPABASE_URL}/rest/v1/users"
-    payload = {
+def approve_user(user_id, alias, division):
+    supabase.from_("pending_users").delete().eq("id", user_id).execute()
+    supabase.from_("users").insert({
         "id": user_id,
         "alias": alias,
         "division": division,
-        "can_assign": can_assign
-    }
-    async with httpx.AsyncClient() as client:
-        r = await client.post(url, json=payload, headers=HEADERS)
-        if r.status_code in (200, 201):
-            # Hapus dari pending
-            del_url = f"{SUPABASE_URL}/rest/v1/pending_users?id=eq.{user_id}"
-            await client.delete(del_url, headers=HEADERS)
-            return True
-        else:
-            logging.error(f"approve_user error: {r.text}")
-            return False
+        "role": "user"
+    }).execute()
+    return True
+
+def remove_user(user_id):
+    supabase.from_("users").delete().eq("id", user_id).execute()
+
+def add_task(giver_id, receiver_id, description, deadline):
+    supabase.from_("tasks").insert({
+        "giver_id": giver_id,
+        "receiver_id": receiver_id,
+        "description": description,
+        "deadline": deadline
+    }).execute()
+
+def fetch_tasks(user_id):
+    response = supabase.from_("tasks").select(
+        "id, description, deadline, giver_id, receiver_id"
+    ).execute()
+    return response.data if response.data else []
+
+def fetch_my_tasks(user_id):
+    response = supabase.from_("tasks").select(
+        "id, description, deadline, giver_id, receiver_id"
+    ).eq("receiver_id", user_id).execute()
+    return response.data if response.data else []
+
+def delete_task(task_id):
+    supabase.from_("tasks").delete().eq("id", task_id).execute()
